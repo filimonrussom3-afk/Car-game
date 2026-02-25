@@ -1,0 +1,322 @@
+ <!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Realistic Car Game</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js"></script>
+<style>
+body { margin:0; overflow:hidden; background:#111; }
+</style>
+</head>
+<body>
+<script>
+
+// ================= GAME STATE =================
+let lives = 3;
+let score = 0;
+let gameOver = false;
+let difficulty = 6;
+let lastScoreTime = 0;
+let gameStartTime = 0;
+
+// ================= PLAYER =================
+let player = {
+    x: 0,
+    y: 0,
+    w: 40,
+    h: 70,
+    speed: 0,
+    maxSpeed: 8,
+    acceleration: 0.9,
+    boostActive: false,
+    boostStart: 0,
+    boostDuration: 400,
+    boostMultiplier: 1.6
+};
+
+let keys = {};
+let enemies = [];
+let lastSpawn = 0;
+let spawnInterval = 1500;
+
+// ================= SETUP =================
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    player.x = width/2 - player.w/2;
+    player.y = height - 120;
+    gameStartTime = millis();
+}
+
+// ================= MAIN LOOP =================
+function draw() {
+    drawBackground();
+
+    if(gameOver){
+        drawGameOver();
+        return;
+    }
+
+    updateDifficulty();
+    updateScore();
+    handleInputAndMovement();
+    updateBoost();
+    spawnEnemies();
+    updateEnemies();
+    checkCollisions();
+
+    drawRoad();
+    drawPlayer();
+    drawEnemies();
+    drawUI();
+
+    if(lives <= 0){
+        gameOver = true;
+    }
+}
+
+// ================= BACKGROUND =================
+function drawBackground(){
+    background(30);
+
+    // Grass sides
+    fill(40,100,40);
+    rect(0,0,width*0.25,height);
+    rect(width*0.75,0,width*0.25,height);
+
+    // Trees scrolling
+    let offset = (millis()*0.2)%200;
+    for(let y=-offset; y<height; y+=200){
+        fill(60,140,60);
+        rect(width*0.1, y, 30,60,10);
+        rect(width*0.85, y, 30,60,10);
+    }
+}
+
+// ================= ROAD =================
+function drawRoad(){
+    fill(60);
+    rect(width*0.25,0,width*0.5,height);
+
+    // moving dashed lines
+    stroke(255);
+    strokeWeight(4);
+    let offset = (millis()*0.3)%60;
+    for(let y=-offset; y<height; y+=60){
+        line(width/2,y,width/2,y+30);
+    }
+    noStroke();
+}
+
+// ================= PLAYER MOVEMENT =================
+function handleInputAndMovement(){
+    let boost = player.boostActive ? player.boostMultiplier : 1;
+    let maxSpeed = player.maxSpeed * boost;
+
+    if(keys['a'] || keys[LEFT_ARROW]){
+        player.speed = max(player.speed - player.acceleration, -maxSpeed);
+    }
+    else if(keys['d'] || keys[RIGHT_ARROW]){
+        player.speed = min(player.speed + player.acceleration, maxSpeed);
+    }
+    else{
+        if(player.speed > 0) player.speed -= player.acceleration;
+        if(player.speed < 0) player.speed += player.acceleration;
+    }
+
+    player.x += player.speed;
+    player.x = constrain(player.x, width*0.25, width*0.75-player.w);
+}
+
+// ================= BOOST =================
+function updateBoost(){
+    if(player.boostActive && millis()-player.boostStart > player.boostDuration){
+        player.boostActive = false;
+    }
+}
+
+// ================= PLAYER DRAW =================
+function drawPlayer(){
+    // shadow
+    fill(0,80);
+    rect(player.x+5, player.y+5, player.w, player.h,10);
+
+    // body
+    fill(0,100,255);
+    rect(player.x, player.y, player.w, player.h,10);
+
+    // windshield
+    fill(180,220,255);
+    rect(player.x+8, player.y+10, player.w-16, 20,5);
+
+    // wheels
+    fill(20);
+    rect(player.x-5, player.y+15,5,20);
+    rect(player.x-5, player.y+45,5,20);
+    rect(player.x+player.w, player.y+15,5,20);
+    rect(player.x+player.w, player.y+45,5,20);
+
+    if(player.boostActive){
+        fill(255,200,0,150);
+        rect(player.x-3, player.y-3, player.w+6, player.h+6,12);
+    }
+}
+
+// ================= ENEMIES =================
+function spawnEnemies(){
+    if(millis()-lastSpawn > spawnInterval/difficulty){
+        let type = random()<0.6 ? "car":"truck";
+        enemies.push(createEnemy(type));
+        lastSpawn = millis();
+    }
+}
+
+function createEnemy(type){
+    if(type==="car"){
+        return {
+            x: random(width*0.27,width*0.73-35),
+            y:-80,
+            w:35,
+            h:65,
+            speed:4+difficulty,
+            type:"car"
+        };
+    } else {
+        return {
+            x: random(width*0.27,width*0.73-50),
+            y:-100,
+            w:50,
+            h:90,
+            speed:2+difficulty*0.5,
+            type:"truck"
+        };
+    }
+}
+
+function updateEnemies(){
+    for(let i=enemies.length-1;i>=0;i--){
+        enemies[i].y += enemies[i].speed;
+
+        if(enemies[i].y > height){
+            enemies.splice(i,1);
+        }
+    }
+}
+
+function drawEnemies(){
+    for(let e of enemies){
+        fill(150);
+        rect(e.x,e.y,e.w,e.h,8);
+
+        fill(200);
+        rect(e.x+8,e.y+10,e.w-16,20,5);
+
+        fill(20);
+        rect(e.x-5,e.y+15,5,20);
+        rect(e.x-5,e.y+45,5,20);
+        rect(e.x+e.w,e.y+15,5,20);
+        rect(e.x+e.w,e.y+45,5,20);
+    }
+}
+
+// ================= COLLISIONS =================
+function checkCollisions(){
+    for(let i=enemies.length-1;i>=0;i--){
+        let e = enemies[i];
+        if(player.x < e.x+e.w &&
+           player.x+player.w > e.x &&
+           player.y < e.y+e.h &&
+           player.y+player.h > e.y){
+            enemies.splice(i,1);
+            lives--;
+            playBeep(400);
+        }
+    }
+}
+
+// ================= SCORE =================
+function updateScore(){
+    if(millis()-lastScoreTime>1000){
+        score++;
+        lastScoreTime=millis();
+    }
+}
+
+// ================= DIFFICULTY =================
+function updateDifficulty(){
+    difficulty = 1 + (millis()-gameStartTime)/20000;
+}
+
+// ================= UI =================
+function drawUI(){
+    fill(255);
+    textSize(24);
+    textAlign(LEFT,TOP);
+    text("Score: "+score,20,20);
+
+    for(let i=0;i<lives;i++){
+        fill(255,0,0);
+        ellipse(30+i*30,70,20);
+    }
+}
+
+// ================= GAME OVER =================
+function drawGameOver(){
+    fill(0,200);
+    rect(0,0,width,height);
+
+    fill(255);
+    textAlign(CENTER,CENTER);
+    textSize(70);
+    text("Game Over",width/2,height/2);
+    textSize(30);
+    text("Press R to Restart",width/2,height/2+60);
+}
+
+// ================= RESTART =================
+function restartGame(){
+    lives=3;
+    score=0;
+    difficulty=3;
+    enemies=[];
+    gameOver=false;
+    gameStartTime=millis();
+}
+
+// ================= INPUT =================
+function keyPressed(){
+    keys[key.toLowerCase()] = true;
+    keys[keyCode] = true;
+
+    if(keyCode===SHIFT && !player.boostActive){
+        player.boostActive=true;
+        player.boostStart=millis();
+        playBeep(800);
+    }
+
+    if(key.toLowerCase()==='r'){
+        restartGame();
+    }
+}
+
+function keyReleased(){
+    keys[key.toLowerCase()] = false;
+    keys[keyCode] = false;
+}
+
+// ================= SOUND =================
+function playBeep(freq){
+    let osc = new p5.Oscillator();
+    osc.freq(freq);
+    osc.amp(0.1);
+    osc.start();
+    setTimeout(()=>osc.stop(),150);
+}
+
+function windowResized(){
+    resizeCanvas(windowWidth,windowHeight);
+}
+
+</script>
+</body>
+</html>
