@@ -1,0 +1,353 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simple Top-Down Car Game Demo - p5.js</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js"></script>
+<style>
+  body { margin: 0; overflow: hidden; background: #222; }
+</style>
+</head>
+<body>
+<script>
+// ======== GAME STATE ========
+let lives = 3;
+let score = 0;
+let gameOver = false;
+let difficulty = 1;
+let lastScoreTime = 0;
+let gameStartTime = 0;
+
+// ======== PLAYER ========
+const player = {
+  x: 0,
+  y: 0,
+  w:  40,
+  h:  90,
+  speed: 0,
+  acceleration: 0.5,
+  maxSpeed: 8,
+  boostActive: false,
+  boostStartTime: 0,
+  boostDuration: 400,
+  boostMultiplier: 1.6,
+};
+
+// ======== INPUT STATE ========
+let keys = {};
+
+// ======== ENEMY CARS ========
+let enemies = [];
+let lastSpawnTime = 0;
+let baseSpawnInterval = 1600;
+
+// ======== SETUP: Initializes canvas and player position ========
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  resetGame();
+}
+// ======== RESET GAME STATE ========
+function resetGame() {
+  lives = 3;
+  score = 0;
+  gameOver = false;
+  difficulty = 1;
+  enemies = [];
+  gameStartTime = millis();
+  lastScoreTime = millis();
+  player.x = width / 2 - player.w / 2;
+  player.y = height - 120;
+  player.speed = 0;
+  player.boostActive = false;
+}
+// ======== MAIN DRAW LOOP: Handles all game logic and rendering ========
+function draw() {
+  background(35); // Dark gray background
+
+  drawScenery();
+
+  if (gameOver) {
+    drawGameOverScreen();
+    return;
+  }
+
+  updateDifficulty();
+  updateScore();
+
+  handlePlayerInput();
+  updatePlayerPosition();
+  updateBoostStatus();
+
+  spawnEnemies();
+  updateEnemies();
+  drawRoad();
+  drawPlayer();
+  drawEnemies();
+  checkCollisions();
+  drawUI();
+
+  if (lives <= 0) {
+    gameOver = true;
+  }
+}
+
+// ======== DRAW SCENERY: Trees on sides ========
+function drawScenery() {
+  // Left grass
+  fill(30, 80, 30);
+  rect(0, 0, width * 0.25, height);
+  // Right grass
+  rect(width * 0.75, 0, width * 0.25, height);
+
+  // Trees on left & right with vertical scrolling effect
+  let offset = (millis() * 0.15) % 200;
+  fill(50, 150, 50);
+  noStroke();
+  for (let y = -offset; y < height; y += 200) {
+    rect(width * 0.1, y, 30, 60, 10);  // left tree
+    rect(width * 0.85, y + 100, 30, 60, 10); // right tree staggered
+  }
+}
+
+// ======== DRAW ROAD: center dashed white lines ========
+function drawRoad() {
+  fill(50);
+  rect(width * 0.25, 0, width * 0.5, height);
+
+  stroke(255);
+  strokeWeight(4);
+  let dashOffset = (millis() * 0.3) % 60;
+  for (let y = -dashOffset; y < height; y += 60) {
+    line(width / 2, y, width / 2, y + 30);
+  }
+  noStroke();
+}
+
+// ======== PLAYER INPUT: Track keys pressed/released ========
+function keyPressed() {
+  keys[key.toLowerCase()] = true;
+  keys[keyCode] = true;
+
+  if (keyCode === SHIFT && !player.boostActive && !gameOver) {
+    player.boostActive = true;
+    player.boostStartTime = millis();
+    playBeep(900);
+  }
+
+  if (key.toLowerCase() === 'r' && gameOver) {
+    resetGame();
+  }
+}
+function keyReleased() {
+  keys[key.toLowerCase()] = false;
+  keys[keyCode] = false;
+}
+
+// ======== HANDLE PLAYER INPUT: Update horizontal speed ========
+function handlePlayerInput() {
+  let maxSpeed = player.maxSpeed * (player.boostActive ? player.boostMultiplier : 1);
+
+  if (keys['a'] || keys[LEFT_ARROW]) {
+    player.speed -= player.acceleration;
+  } else if (keys['d'] || keys[RIGHT_ARROW]) {
+    player.speed += player.acceleration;
+  } else {
+    // Slow down smoothly when no keys pressed
+    if (player.speed > 0) {
+      player.speed -= player.acceleration;
+      if (player.speed < 0) player.speed = 0;
+    } else if (player.speed < 0) {
+      player.speed += player.acceleration;
+      if (player.speed > 0) player.speed = 0;
+    }
+  }
+  player.speed = constrain(player.speed, -maxSpeed, maxSpeed);
+}
+// ======== UPDATE PLAYER POSITION: Move and constrain on road ========
+function updatePlayerPosition() {
+  player.x += player.speed;
+  player.x = constrain(player.x, width * 0.25, width * 0.75 - player.w);
+}
+// ======== UPDATE BOOST STATUS: Disable boost after duration ========
+function updateBoostStatus() {
+  if (player.boostActive && millis() - player.boostStartTime > player.boostDuration) {
+    player.boostActive = false;
+  }
+}
+// ======== DRAW PLAYER CAR: blue rounded rectangle with details ========
+function drawPlayer() {
+  // Shadow
+  fill(0, 80);
+  rect(player.x + 5, player.y + 5, player.w, player.h, 10);
+
+  // Body
+  fill(0, 100, 255);
+  rect(player.x, player.y, player.w, player.h, 10);
+
+  // Windshield
+  fill(180, 220, 255);
+  rect(player.x + 8, player.y + 10, player.w - 16, 20, 5);
+
+  // Wheels
+  fill(20);
+  rect(player.x - 5, player.y + 15, 5, 20);
+  rect(player.x - 5, player.y + 45, 5, 20);
+  rect(player.x + player.w, player.y + 15, 5, 20);
+  rect(player.x + player.w, player.y + 45, 5, 20);
+
+  // Boost glow
+  if (player.boostActive) {
+    fill(255, 200, 0, 150);
+    rect(player.x - 3, player.y - 3, player.w + 6, player.h + 6, 12);
+  }
+}
+
+// ======== ENEMY TYPES & SPAWNING ========
+function spawnEnemies() {
+  let spawnInterval = baseSpawnInterval / difficulty;
+  if (millis() - lastSpawnTime > spawnInterval) {
+    // Random enemy type by probability
+    // 60% small car, 40% large truck
+    let type = random() < 0.6 ? "car" : "truck";
+    enemies.push(createEnemy(type));
+    lastSpawnTime = millis();
+  }
+}
+
+function createEnemy(type) {
+  if (type === "car") {
+    return {
+      x: random(width * 0.27, width * 0.73 - 35),
+      y: -80,
+      w: 35,
+      h: 65,
+      speed: 4 + difficulty * 0.9,
+      type: "car",
+    };
+  } else {
+    return {
+      x: random(width * 0.27, width * 0.73 - 50),
+      y: -100,
+      w: 50,
+      h: 90,
+      speed: 2 + difficulty * 0.5,
+      type: "truck",
+    };
+  }
+}
+// ======== UPDATE ENEMIES: Move down, remove if off screen ========
+function updateEnemies() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    enemies[i].y += enemies[i].speed;
+    if (enemies[i].y > height) {
+      enemies.splice(i, 1);
+    }
+  }
+}
+// ======== DRAW ENEMY CARS: gray rectangles with windows & wheels ========
+function drawEnemies() {
+  for (const e of enemies) {
+    fill(150);
+    rect(e.x, e.y, e.w, e.h, 8);
+
+    fill(200);
+    rect(e.x + 8, e.y + 10, e.w - 16, 20, 5);
+
+    fill(20);
+    rect(e.x - 5, e.y + 15, 5, 20);
+    rect(e.x - 5, e.y + 45, 5, 20);
+    rect(e.x + e.w, e.y + 15, 5, 20);
+    rect(e.x + e.w, e.y + 45, 5, 20);
+  }
+}
+// ======== CHECK COLLISIONS: reduce lives and beep on hit ========
+function checkCollisions() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (
+      player.x < e.x + e.w &&
+      player.x + player.w > e.x &&
+      player.y < e.y + e.h &&
+      player.y + player.h > e.y
+    ) {
+      enemies.splice(i, 1);
+      lives--;
+      playBeep(400);
+    }
+  }
+}
+// ======== UPDATE SCORE: +1 point per second survived ========
+function updateScore() {
+  if (millis() - lastScoreTime > 1000) {
+    score++;
+    lastScoreTime = millis();
+  }
+}
+// ======== UPDATE DIFFICULTY: increase spawn speed & enemy speed over time ========
+function updateDifficulty() {
+  difficulty = 1 + (millis() - gameStartTime) / 20000;
+}
+// ======== DRAW UI: score and lives as hearts on top-left ========
+function drawUI() {
+  fill(255);
+  textSize(24);
+  textAlign(LEFT, TOP);
+  text("Score: " + score, 20, 20);
+
+  for (let i = 0; i < lives; i++) {
+    fill(255, 0, 0);
+    drawHeart(30 + i * 30, 70, 12);
+  }
+}
+// ======== DRAW HEART shape for lives ========
+function drawHeart(x, y, size) {
+  beginShape();
+  vertex(x, y);
+  bezierVertex(
+    x - size / 2,
+    y - size / 2,
+    x - size,
+    y + size / 3,
+    x,
+    y + size
+  );
+  bezierVertex(
+    x + size,
+    y + size / 3,
+    x + size / 2,
+    y - size / 2,
+    x,
+    y
+  );
+  endShape(CLOSE);
+}
+// ======== DRAW GAME OVER SCREEN ========
+function drawGameOverScreen() {
+  fill(0, 200);
+  rect(0, 0, width, height);
+
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(70);
+  text("Game Over", width / 2, height / 2);
+
+  textSize(30);
+  text("Press R to Restart", width / 2, height / 2 + 60);
+}
+// ======== PLAY SIMPLE BEEP SOUND ========
+function playBeep(freq) {
+  let osc = new p5.Oscillator();
+  osc.freq(freq);
+  osc.amp(0.1);
+  osc.start();
+  setTimeout(() => osc.stop(), 150);
+}
+// ======== RESIZE CANVAS on window size change ========
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+</script>
+</body>
+</html>

@@ -25,7 +25,7 @@ let player = {
     x: 0,
     y: 0,
     w: 40,
-    h: 70,
+    h: 80,
     speed: 0,
     maxSpeed: 8,
     acceleration: 0.9,
@@ -256,8 +256,29 @@ function drawUI(){
 
     for(let i=0;i<lives;i++){
         fill(255,0,0);
-        ellipse(30+i*30,70,20);
-    }
+        drawHeart(30+i*30,70,20);
+    } 
+}
+function drawHeart(x, y, size){
+    beginShape();
+    vertex(x, y);
+    bezierVertex(
+        x - size/2,
+        y - size/2,
+        x - size,
+        y + size/3,
+        x,
+        y + size
+    );
+    bezierVertex(
+        x + size,
+        y + size/3,
+        x + size/2,
+        y - size/2,
+        x,
+        y
+    );
+    endShape(CLOSE);
 }
 
 // ================= GAME OVER =================
